@@ -1,0 +1,2130 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 17.2
+-- Dumped by pg_dump version 17.2
+
+-- Started on 2024-12-23 23:36:25
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 269 (class 1255 OID 19710)
+-- Name: abonelik_sayisi_azalt(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.abonelik_sayisi_azalt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Eğer silinen abonelik Standart ise "Standart" tablosundaki sayıyı azalt
+    IF OLD."AbonelikID" = 1 THEN
+        UPDATE "Standart"
+        SET "Toplam Abonelik" = "Toplam Abonelik" - 1
+        WHERE "AbonelikID" = 1;
+
+    -- Eğer silinen abonelik Premium ise "Premium" tablosundaki sayıyı azalt
+    ELSIF OLD."AbonelikID" = 2 THEN
+        UPDATE "Premium"
+        SET "Toplam Abonelik" = "Toplam Abonelik" - 1
+        WHERE "AbonelikID" = 2;
+    END IF;
+
+    RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION public.abonelik_sayisi_azalt() OWNER TO postgres;
+
+--
+-- TOC entry 263 (class 1255 OID 19708)
+-- Name: abonelik_sayisi_guncelle(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.abonelik_sayisi_guncelle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Eğer yeni abonelik Standart ise "Standart" tablosundaki sayıyı artır
+    IF NEW."AbonelikID" = 1 THEN
+        UPDATE "Standart"
+        SET "Toplam Abonelik" = "Toplam Abonelik" + 1
+        WHERE "AbonelikID" = 1;
+
+    -- Eğer yeni abonelik Premium ise "Premium" tablosundaki sayıyı artır
+    ELSIF NEW."AbonelikID" = 2 THEN
+        UPDATE "Premium"
+        SET "Toplam Abonelik" = "Toplam Abonelik" + 1
+        WHERE "AbonelikID" = 2;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.abonelik_sayisi_guncelle() OWNER TO postgres;
+
+--
+-- TOC entry 245 (class 1255 OID 19686)
+-- Name: abonelik_ücreti_güncelle(integer, character varying); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public."abonelik_ücreti_güncelle"(IN p_abonelik_id integer, IN "p_yeni_ücret" character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Abonelik ID kontrolü
+    IF NOT EXISTS (SELECT 1 FROM "Abonelik" WHERE "AbonelikID" = p_abonelik_id) THEN
+        RAISE EXCEPTION 'AbonelikID % bulunamadı.', p_abonelik_id;
+    END IF;
+
+    -- Ücret güncellemesi
+    UPDATE "Abonelik"
+    SET "Ücret" = p_yeni_ücret
+    WHERE "AbonelikID" = p_abonelik_id;
+
+    RAISE NOTICE 'AbonelikID % için ücret güncellenmiştir.', p_abonelik_id;
+END;
+$$;
+
+
+ALTER PROCEDURE public."abonelik_ücreti_güncelle"(IN p_abonelik_id integer, IN "p_yeni_ücret" character varying) OWNER TO postgres;
+
+--
+-- TOC entry 272 (class 1255 OID 19767)
+-- Name: bolum_ve_dizi_izlenme_sayisi_artir(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.bolum_ve_dizi_izlenme_sayisi_artir() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Bölüm tablosundaki ilgili bölümün izlenme sayısını artır
+    UPDATE "Bölümler"
+    SET "İzlenme Sayısı" = "İzlenme Sayısı" + 1
+    WHERE "BölümID" = NEW."BölümID";
+
+    -- Bölümün ait olduğu dizinin izlenme sayısını artır
+    UPDATE "Diziler"
+    SET "İzlenme Sayısı" ="İzlenme Sayısı" + 1
+    WHERE "DiziID" = (SELECT "DiziID" FROM "Bölümler" WHERE "BölümID" = NEW."BölümID");
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.bolum_ve_dizi_izlenme_sayisi_artir() OWNER TO postgres;
+
+--
+-- TOC entry 248 (class 1255 OID 19692)
+-- Name: dizi_puan_ortalama_hesapla(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.dizi_puan_ortalama_hesapla()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    dizi_id INTEGER;
+    dizi_ad VARCHAR(30);
+    toplam_puan INTEGER;
+    ortalama_puan NUMERIC(5, 2);
+BEGIN
+    -- Film puanlarını hesapla
+    FOR dizi_id, dizi_ad IN 
+        SELECT d."DiziID", d."Ad"
+        FROM "Diziler" d
+    LOOP
+        -- Toplam puan ve ortalama puan hesaplama
+        SELECT 
+            COALESCE(SUM(dp."Puan"), 0), 
+            COALESCE(AVG(dp."Puan"), 0)
+        INTO toplam_puan, ortalama_puan
+        FROM "DiziPuan" dp
+        WHERE dp."DiziID" = dizi_id;
+
+        -- Sonuçları göster
+        RAISE NOTICE 'Dizi Adı: %, Toplam Puan: %, Ortalama Puan: %', dizi_ad, toplam_puan, ortalama_puan;
+    END LOOP;
+END;
+$$;
+
+
+ALTER PROCEDURE public.dizi_puan_ortalama_hesapla() OWNER TO postgres;
+
+--
+-- TOC entry 251 (class 1255 OID 19771)
+-- Name: dizi_toplam_izlenme_sayisi(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.dizi_toplam_izlenme_sayisi(dizi_id integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    toplam_izlenme INT;
+BEGIN
+    SELECT SUM("İzlenme Sayısı")
+    INTO toplam_izlenme
+    FROM "Bölümler"
+    WHERE "DiziID" = dizi_id;
+
+    RETURN COALESCE(toplam_izlenme, 0); -- Eğer izlenme sayısı yoksa 0 döndür
+END;
+$$;
+
+
+ALTER FUNCTION public.dizi_toplam_izlenme_sayisi(dizi_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 247 (class 1255 OID 19758)
+-- Name: film_izlenme_sayisi_artir(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.film_izlenme_sayisi_artir() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Film tablosundaki ilgili filmin izlenme sayısını artır
+    UPDATE "Filmler"
+    SET "İzlenme Sayısı" = "İzlenme Sayısı" + 1
+    WHERE "FilmID" = NEW."FilmID";
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.film_izlenme_sayisi_artir() OWNER TO postgres;
+
+--
+-- TOC entry 246 (class 1255 OID 19769)
+-- Name: film_ortalama_puan(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.film_ortalama_puan(film_id integer) RETURNS double precision
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    ortalama FLOAT;
+BEGIN
+    SELECT AVG("Puan")
+    INTO ortalama
+    FROM "FilmPuan"
+    WHERE "FilmID" = film_id;
+
+    RETURN COALESCE(ortalama, 0); -- Eğer hiç puan yoksa 0 döndür
+END;
+$$;
+
+
+ALTER FUNCTION public.film_ortalama_puan(film_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 249 (class 1255 OID 19691)
+-- Name: film_puan_ortalama_hesapla(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.film_puan_ortalama_hesapla()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    film_id INTEGER;
+    film_ad VARCHAR(100);
+    toplam_puan INTEGER;
+    ortalama_puan NUMERIC(5, 2);
+BEGIN
+    -- Film puanlarını hesapla
+    FOR film_id, film_ad IN 
+        SELECT f."FilmID", f."Ad"
+        FROM "Filmler" f
+    LOOP
+        -- Toplam puan ve ortalama puan hesaplama
+        SELECT 
+            COALESCE(SUM(fp."Puan"), 0), 
+            COALESCE(AVG(fp."Puan"), 0)
+        INTO toplam_puan, ortalama_puan
+        FROM "FilmPuan" fp
+        WHERE fp."FilmID" = film_id;
+
+        -- Sonuçları göster
+        RAISE NOTICE 'Film Adı: %, Toplam Puan: %, Ortalama Puan: %', film_ad, toplam_puan, ortalama_puan;
+    END LOOP;
+END;
+$$;
+
+
+ALTER PROCEDURE public.film_puan_ortalama_hesapla() OWNER TO postgres;
+
+--
+-- TOC entry 271 (class 1255 OID 19707)
+-- Name: kisiodemeliste_ekleme(integer); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.kisiodemeliste_ekleme(IN p_kullanici_id integer)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_abonelik_id INTEGER;
+BEGIN
+    -- Kullanıcının AbonelikID değerini al
+    SELECT "AbonelikID" INTO v_abonelik_id
+    FROM "Kullanıcılar"
+    WHERE "KullanıcıID" = p_kullanici_id;
+
+    -- Eğer kullanıcı bulunmazsa, hata mesajı döndürelim
+    IF v_abonelik_id IS NULL THEN
+        RAISE EXCEPTION 'KullanıcıID % bulunamadı!', p_kullanici_id;
+    END IF;
+
+    -- Abonelik türüne göre ödeme tutarını belirleyelim
+    IF v_abonelik_id = 1 THEN
+        INSERT INTO "Ödemeler" ("KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar")
+        VALUES (p_kullanici_id, v_abonelik_id, CURRENT_DATE, 100);  -- AbonelikID = 1 ise 100 TL
+    ELSIF v_abonelik_id = 2 THEN
+        INSERT INTO "Ödemeler" ("KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar")
+        VALUES (p_kullanici_id, v_abonelik_id, CURRENT_DATE, 300);  -- AbonelikID = 2 ise 300 TL
+    ELSE
+        INSERT INTO "Ödemeler" ("KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar")
+        VALUES (p_kullanici_id, v_abonelik_id, CURRENT_DATE, 0);  -- Diğer abonelik türleri için 0 TL (isteğe bağlı)
+    END IF;
+END;
+$$;
+
+
+ALTER PROCEDURE public.kisiodemeliste_ekleme(IN p_kullanici_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 252 (class 1255 OID 19772)
+-- Name: kullanici_izledigi_diziler(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.kullanici_izledigi_diziler(kullanici_id integer) RETURNS TABLE("Dizi Adı" character varying, "İzleme Tarihi" date)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT d."Ad", dg."Tarih"
+    FROM "DiziGeçmiş" dg
+    JOIN "Bölümler" b ON dg."BölümID" = b."BölümID"
+    JOIN "Diziler" d ON b."DiziID" = d."DiziID"
+    WHERE dg."KullanıcıID" = kullanici_id;
+END;
+$$;
+
+
+ALTER FUNCTION public.kullanici_izledigi_diziler(kullanici_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 250 (class 1255 OID 19770)
+-- Name: kullanici_izledigi_filmler(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.kullanici_izledigi_filmler(kullanici_id integer) RETURNS TABLE("Film Adı" character varying, "İzleme Tarihi" date)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT f."Ad", fg."Tarih"
+    FROM "FilmGeçmiş" fg
+    JOIN "Filmler" f ON fg."FilmID" = f."FilmID"
+    WHERE fg."KullanıcıID" = kullanici_id;
+END;
+$$;
+
+
+ALTER FUNCTION public.kullanici_izledigi_filmler(kullanici_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 266 (class 1255 OID 19693)
+-- Name: kullanıcıistatistikleri(integer); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public."kullanıcıistatistikleri"(IN "p_kullanıcıid" integer)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    film_sayisi INTEGER;
+    dizi_sayisi INTEGER;
+	dizi_yorum_sayisi INTEGER;
+	film_yorum_sayisi INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO film_sayisi
+    FROM "FilmGeçmiş"
+    WHERE "KullanıcıID" = p_KullanıcıID;
+
+    SELECT COUNT(*) INTO dizi_sayisi
+    FROM "DiziGeçmiş"
+    WHERE "KullanıcıID" = p_KullanıcıID;
+
+	SELECT COUNT(*)INTO dizi_yorum_sayisi
+	FROM "FilmYorum"                         
+	WHERE "KullanıcıID" = p_KullanıcıID;
+
+	SELECT COUNT(*)INTO film_yorum_sayisi
+	FROM  "DiziYorum"                    
+	WHERE "KullanıcıID" = p_KullanıcıID;
+
+	
+
+    RAISE NOTICE 'Kullanıcı % toplamda % film ve % dizi izlemiştir. % kez dizilere yorum yapmıştır. % kez filmlere yorum yapmıştır', 
+        p_KullanıcıID, film_sayisi, dizi_sayisi, dizi_yorum_sayisi, film_yorum_sayisi;
+END;
+$$;
+
+
+ALTER PROCEDURE public."kullanıcıistatistikleri"(IN "p_kullanıcıid" integer) OWNER TO postgres;
+
+--
+-- TOC entry 265 (class 1255 OID 19705)
+-- Name: odeme_listesine_ekle(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.odeme_listesine_ekle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Abonelik türüne göre ödeme tutarını belirleyelim
+    IF NEW."AbonelikID" = 1 THEN
+        INSERT INTO "Ödemeler" ("KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar")
+        VALUES (NEW."KullanıcıID", NEW."AbonelikID", CURRENT_DATE, 100);  -- AbonelikID = 1 ise 100 TL
+    ELSIF NEW."AbonelikID" = 2 THEN
+        INSERT INTO "Ödemeler" ("KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar")
+        VALUES (NEW."KullanıcıID", NEW."AbonelikID", CURRENT_DATE, 300);  -- AbonelikID = 2 ise 300 TL
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.odeme_listesine_ekle() OWNER TO postgres;
+
+--
+-- TOC entry 270 (class 1255 OID 19754)
+-- Name: tekrar_puan_engelle(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.tekrar_puan_engelle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    mevcut_puan INTEGER;
+BEGIN
+    IF TG_TABLE_NAME = 'FilmPuan' THEN
+        SELECT COUNT(*) INTO mevcut_puan
+        FROM "FilmPuan"
+        WHERE "KullanıcıID" = NEW."KullanıcıID" AND "FilmID" = NEW."FilmID";
+
+        IF mevcut_puan > 0 THEN
+            RAISE EXCEPTION 'Aynı filme tekrar puan veremezsiniz.';
+        END IF;
+    ELSIF TG_TABLE_NAME = 'DiziPuan' THEN
+        SELECT COUNT(*) INTO mevcut_puan
+        FROM "DiziPuan"
+        WHERE "KullanıcıID" = NEW."KullanıcıID" AND "BölümID" = NEW."BölümID";
+
+        IF mevcut_puan > 0 THEN
+            RAISE EXCEPTION 'Aynı dizi bölümüne tekrar puan veremezsiniz.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.tekrar_puan_engelle() OWNER TO postgres;
+
+--
+-- TOC entry 267 (class 1255 OID 19694)
+-- Name: update_abone_sayisi(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.update_abone_sayisi() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Kullanıcının abonelik türüne göre sayıyı güncelle
+    IF NEW."AbonelikID" IS NOT NULL THEN
+        -- Standart abonelik için abone sayısını artır
+        IF (SELECT "Adı" FROM "Abonelik" WHERE "AbonelikID" = NEW."AbonelikID") = '1' THEN
+            UPDATE "Standart"
+            SET "Toplam Abonelik" = "Toplam Abonelik" + 1;
+        -- Premium abonelik için abone sayısını artır
+        ELSIF (SELECT "Adı" FROM "Abonelik" WHERE "AbonelikID" = NEW."AbonelikID") = '2' THEN
+            UPDATE "Premium"
+            SET "Toplam Abonelik" = "Toplam Abonelik" + 1;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.update_abone_sayisi() OWNER TO postgres;
+
+--
+-- TOC entry 268 (class 1255 OID 19696)
+-- Name: update_abone_sayisi_sil(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.update_abone_sayisi_sil() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Kullanıcının abonelik türüne göre sayıyı azalt
+    IF OLD."AbonelikID" IS NOT NULL THEN
+        -- Standart abonelik için abone sayısını azalt
+        IF (SELECT "Adı" FROM "Abonelik" WHERE "AbonelikID" = OLD."AbonelikID") = 'standart' THEN
+            UPDATE "standart"
+            SET "Toplam Abonelik" = "Toplam Abonelik" - 1;
+        -- Premium abonelik için abone sayısını azalt
+        ELSIF (SELECT "Adı" FROM "Abonelik" WHERE "AbonelikID" = OLD."AbonelikID") = 'premium' THEN
+            UPDATE "premium"
+            SET "Toplam Abonelik" = "Toplam Abonelik" - 1;
+        END IF;
+    END IF;
+
+    RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION public.update_abone_sayisi_sil() OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 226 (class 1259 OID 19503)
+-- Name: Abonelik; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Abonelik" (
+    "AbonelikID" integer NOT NULL,
+    "Adı" character varying(30) NOT NULL,
+    "Ücret" character varying(30) NOT NULL,
+    "Özellikler" character varying(100) NOT NULL,
+    CONSTRAINT abonelik_id_kontrol CHECK ((("AbonelikID" >= 1) AND ("AbonelikID" <= 2)))
+);
+
+
+ALTER TABLE public."Abonelik" OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 19502)
+-- Name: Abonelik_AbonelikID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Abonelik_AbonelikID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Abonelik_AbonelikID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5090 (class 0 OID 0)
+-- Dependencies: 225
+-- Name: Abonelik_AbonelikID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Abonelik_AbonelikID_seq" OWNED BY public."Abonelik"."AbonelikID";
+
+
+--
+-- TOC entry 224 (class 1259 OID 19491)
+-- Name: Bölümler; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Bölümler" (
+    "BölümID" integer NOT NULL,
+    "DiziID" integer NOT NULL,
+    "Sezon" integer NOT NULL,
+    "Bölüm" integer NOT NULL,
+    "Yayın Tarihi" date NOT NULL,
+    "Ad" character varying(50),
+    "IMDB Puanı" numeric,
+    "İzlenme Sayısı" integer DEFAULT 0
+);
+
+
+ALTER TABLE public."Bölümler" OWNER TO postgres;
+
+--
+-- TOC entry 223 (class 1259 OID 19490)
+-- Name: Bölümler_BölümID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Bölümler_BölümID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Bölümler_BölümID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5091 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: Bölümler_BölümID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Bölümler_BölümID_seq" OWNED BY public."Bölümler"."BölümID";
+
+
+--
+-- TOC entry 244 (class 1259 OID 19651)
+-- Name: DiziGeçmiş; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."DiziGeçmiş" (
+    "DiziGeçmişID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "BölümID" integer NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL
+);
+
+
+ALTER TABLE public."DiziGeçmiş" OWNER TO postgres;
+
+--
+-- TOC entry 243 (class 1259 OID 19650)
+-- Name: DiziGeçmiş_DiziGeçmişID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."DiziGeçmiş_DiziGeçmişID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."DiziGeçmiş_DiziGeçmişID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5092 (class 0 OID 0)
+-- Dependencies: 243
+-- Name: DiziGeçmiş_DiziGeçmişID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."DiziGeçmiş_DiziGeçmişID_seq" OWNED BY public."DiziGeçmiş"."DiziGeçmişID";
+
+
+--
+-- TOC entry 240 (class 1259 OID 19614)
+-- Name: DiziPuan; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."DiziPuan" (
+    "DiziPuanID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "BölümID" integer NOT NULL,
+    "Puan" integer NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL,
+    CONSTRAINT "DiziPuan_Puan_check" CHECK ((("Puan" >= 1) AND ("Puan" <= 10)))
+);
+
+
+ALTER TABLE public."DiziPuan" OWNER TO postgres;
+
+--
+-- TOC entry 239 (class 1259 OID 19613)
+-- Name: DiziPuan_DiziPuanID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."DiziPuan_DiziPuanID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."DiziPuan_DiziPuanID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5093 (class 0 OID 0)
+-- Dependencies: 239
+-- Name: DiziPuan_DiziPuanID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."DiziPuan_DiziPuanID_seq" OWNED BY public."DiziPuan"."DiziPuanID";
+
+
+--
+-- TOC entry 242 (class 1259 OID 19633)
+-- Name: DiziYorum; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."DiziYorum" (
+    "DiziYorumID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "BölümID" integer NOT NULL,
+    "Yorum" character varying(100) NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL
+);
+
+
+ALTER TABLE public."DiziYorum" OWNER TO postgres;
+
+--
+-- TOC entry 241 (class 1259 OID 19632)
+-- Name: DiziYorum_DiziYorumID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."DiziYorum_DiziYorumID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."DiziYorum_DiziYorumID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5094 (class 0 OID 0)
+-- Dependencies: 241
+-- Name: DiziYorum_DiziYorumID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."DiziYorum_DiziYorumID_seq" OWNED BY public."DiziYorum"."DiziYorumID";
+
+
+--
+-- TOC entry 222 (class 1259 OID 19479)
+-- Name: Diziler; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Diziler" (
+    "DiziID" integer NOT NULL,
+    "KategoriID" integer NOT NULL,
+    "Ad" character varying(30) NOT NULL,
+    "Yayın Tarihi" date NOT NULL,
+    "IMDB Puanı" numeric NOT NULL,
+    "Yönetmen" character varying(30) NOT NULL,
+    "İzlenme Sayısı" integer DEFAULT 0
+);
+
+
+ALTER TABLE public."Diziler" OWNER TO postgres;
+
+--
+-- TOC entry 221 (class 1259 OID 19478)
+-- Name: Diziler_DiziID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Diziler_DiziID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Diziler_DiziID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5095 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: Diziler_DiziID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Diziler_DiziID_seq" OWNED BY public."Diziler"."DiziID";
+
+
+--
+-- TOC entry 238 (class 1259 OID 19597)
+-- Name: FilmGeçmiş; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."FilmGeçmiş" (
+    "FilmGeçmişID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "FilmID" integer NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL
+);
+
+
+ALTER TABLE public."FilmGeçmiş" OWNER TO postgres;
+
+--
+-- TOC entry 237 (class 1259 OID 19596)
+-- Name: FilmGeçmiş_FilmGeçmişID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."FilmGeçmiş_FilmGeçmişID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."FilmGeçmiş_FilmGeçmişID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5096 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: FilmGeçmiş_FilmGeçmişID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."FilmGeçmiş_FilmGeçmişID_seq" OWNED BY public."FilmGeçmiş"."FilmGeçmişID";
+
+
+--
+-- TOC entry 234 (class 1259 OID 19560)
+-- Name: FilmPuan; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."FilmPuan" (
+    "FilmPuanID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "FilmID" integer NOT NULL,
+    "Puan" integer NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL,
+    CONSTRAINT "FilmPuan_Puan_check" CHECK ((("Puan" >= 1) AND ("Puan" <= 10)))
+);
+
+
+ALTER TABLE public."FilmPuan" OWNER TO postgres;
+
+--
+-- TOC entry 233 (class 1259 OID 19559)
+-- Name: FilmPuan_FilmPuanID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."FilmPuan_FilmPuanID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."FilmPuan_FilmPuanID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5097 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: FilmPuan_FilmPuanID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."FilmPuan_FilmPuanID_seq" OWNED BY public."FilmPuan"."FilmPuanID";
+
+
+--
+-- TOC entry 236 (class 1259 OID 19579)
+-- Name: FilmYorum; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."FilmYorum" (
+    "FilmYorumID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "FilmID" integer NOT NULL,
+    "Yorum" character varying(100) NOT NULL,
+    "Tarih" date DEFAULT CURRENT_DATE NOT NULL
+);
+
+
+ALTER TABLE public."FilmYorum" OWNER TO postgres;
+
+--
+-- TOC entry 235 (class 1259 OID 19578)
+-- Name: FilmYorum_FilmYorumID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."FilmYorum_FilmYorumID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."FilmYorum_FilmYorumID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5098 (class 0 OID 0)
+-- Dependencies: 235
+-- Name: FilmYorum_FilmYorumID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."FilmYorum_FilmYorumID_seq" OWNED BY public."FilmYorum"."FilmYorumID";
+
+
+--
+-- TOC entry 220 (class 1259 OID 19467)
+-- Name: Filmler; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Filmler" (
+    "FilmID" integer NOT NULL,
+    "KategoriID" integer NOT NULL,
+    "Ad" character varying(50) NOT NULL,
+    "Yayın Tarihi" date NOT NULL,
+    "IMDB Puanı" numeric NOT NULL,
+    "Yönetmen" character varying(30) NOT NULL,
+    "İzlenme Sayısı" integer DEFAULT 0
+);
+
+
+ALTER TABLE public."Filmler" OWNER TO postgres;
+
+--
+-- TOC entry 219 (class 1259 OID 19466)
+-- Name: Filmler_FilmID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Filmler_FilmID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Filmler_FilmID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5099 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: Filmler_FilmID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Filmler_FilmID_seq" OWNED BY public."Filmler"."FilmID";
+
+
+--
+-- TOC entry 218 (class 1259 OID 19460)
+-- Name: Kategori; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Kategori" (
+    "KategoriID" integer NOT NULL,
+    "Ad" character varying(30) NOT NULL,
+    "Açıklama" character varying(100)
+);
+
+
+ALTER TABLE public."Kategori" OWNER TO postgres;
+
+--
+-- TOC entry 217 (class 1259 OID 19459)
+-- Name: Kategori_KategoriID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Kategori_KategoriID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Kategori_KategoriID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5100 (class 0 OID 0)
+-- Dependencies: 217
+-- Name: Kategori_KategoriID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Kategori_KategoriID_seq" OWNED BY public."Kategori"."KategoriID";
+
+
+--
+-- TOC entry 230 (class 1259 OID 19530)
+-- Name: Kullanıcılar; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Kullanıcılar" (
+    "KullanıcıID" integer NOT NULL,
+    "Adı" character varying(30) NOT NULL,
+    "Soy Adı" character varying(30) NOT NULL,
+    "E-Posta" character varying(30) NOT NULL,
+    "Şifre" character varying(30) NOT NULL,
+    "Kayıt Tarihi" date DEFAULT CURRENT_DATE NOT NULL,
+    "AbonelikID" integer NOT NULL
+);
+
+
+ALTER TABLE public."Kullanıcılar" OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 19529)
+-- Name: Kullanıcılar_KullanıcıID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Kullanıcılar_KullanıcıID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Kullanıcılar_KullanıcıID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5101 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: Kullanıcılar_KullanıcıID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Kullanıcılar_KullanıcıID_seq" OWNED BY public."Kullanıcılar"."KullanıcıID";
+
+
+--
+-- TOC entry 228 (class 1259 OID 19519)
+-- Name: Premium; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Premium" (
+    "AbonelikID" integer NOT NULL,
+    "Toplam Abonelik" integer NOT NULL
+);
+
+
+ALTER TABLE public."Premium" OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 19509)
+-- Name: Standart; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Standart" (
+    "AbonelikID" integer NOT NULL,
+    "Toplam Abonelik" integer NOT NULL
+);
+
+
+ALTER TABLE public."Standart" OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 19543)
+-- Name: Ödemeler; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."Ödemeler" (
+    "ÖdemeID" integer NOT NULL,
+    "KullanıcıID" integer NOT NULL,
+    "AbonelikID" integer NOT NULL,
+    "Ödeme Tarihi" date NOT NULL,
+    "Tutar" integer NOT NULL
+);
+
+
+ALTER TABLE public."Ödemeler" OWNER TO postgres;
+
+--
+-- TOC entry 231 (class 1259 OID 19542)
+-- Name: Ödemeler_ÖdemeID_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public."Ödemeler_ÖdemeID_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public."Ödemeler_ÖdemeID_seq" OWNER TO postgres;
+
+--
+-- TOC entry 5102 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: Ödemeler_ÖdemeID_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public."Ödemeler_ÖdemeID_seq" OWNED BY public."Ödemeler"."ÖdemeID";
+
+
+--
+-- TOC entry 4834 (class 2604 OID 19506)
+-- Name: Abonelik AbonelikID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Abonelik" ALTER COLUMN "AbonelikID" SET DEFAULT nextval('public."Abonelik_AbonelikID_seq"'::regclass);
+
+
+--
+-- TOC entry 4832 (class 2604 OID 19494)
+-- Name: Bölümler BölümID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Bölümler" ALTER COLUMN "BölümID" SET DEFAULT nextval('public."Bölümler_BölümID_seq"'::regclass);
+
+
+--
+-- TOC entry 4848 (class 2604 OID 19654)
+-- Name: DiziGeçmiş DiziGeçmişID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziGeçmiş" ALTER COLUMN "DiziGeçmişID" SET DEFAULT nextval('public."DiziGeçmiş_DiziGeçmişID_seq"'::regclass);
+
+
+--
+-- TOC entry 4844 (class 2604 OID 19617)
+-- Name: DiziPuan DiziPuanID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziPuan" ALTER COLUMN "DiziPuanID" SET DEFAULT nextval('public."DiziPuan_DiziPuanID_seq"'::regclass);
+
+
+--
+-- TOC entry 4846 (class 2604 OID 19636)
+-- Name: DiziYorum DiziYorumID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziYorum" ALTER COLUMN "DiziYorumID" SET DEFAULT nextval('public."DiziYorum_DiziYorumID_seq"'::regclass);
+
+
+--
+-- TOC entry 4830 (class 2604 OID 19482)
+-- Name: Diziler DiziID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Diziler" ALTER COLUMN "DiziID" SET DEFAULT nextval('public."Diziler_DiziID_seq"'::regclass);
+
+
+--
+-- TOC entry 4842 (class 2604 OID 19600)
+-- Name: FilmGeçmiş FilmGeçmişID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmGeçmiş" ALTER COLUMN "FilmGeçmişID" SET DEFAULT nextval('public."FilmGeçmiş_FilmGeçmişID_seq"'::regclass);
+
+
+--
+-- TOC entry 4838 (class 2604 OID 19563)
+-- Name: FilmPuan FilmPuanID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmPuan" ALTER COLUMN "FilmPuanID" SET DEFAULT nextval('public."FilmPuan_FilmPuanID_seq"'::regclass);
+
+
+--
+-- TOC entry 4840 (class 2604 OID 19582)
+-- Name: FilmYorum FilmYorumID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmYorum" ALTER COLUMN "FilmYorumID" SET DEFAULT nextval('public."FilmYorum_FilmYorumID_seq"'::regclass);
+
+
+--
+-- TOC entry 4828 (class 2604 OID 19470)
+-- Name: Filmler FilmID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Filmler" ALTER COLUMN "FilmID" SET DEFAULT nextval('public."Filmler_FilmID_seq"'::regclass);
+
+
+--
+-- TOC entry 4827 (class 2604 OID 19463)
+-- Name: Kategori KategoriID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Kategori" ALTER COLUMN "KategoriID" SET DEFAULT nextval('public."Kategori_KategoriID_seq"'::regclass);
+
+
+--
+-- TOC entry 4835 (class 2604 OID 19533)
+-- Name: Kullanıcılar KullanıcıID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Kullanıcılar" ALTER COLUMN "KullanıcıID" SET DEFAULT nextval('public."Kullanıcılar_KullanıcıID_seq"'::regclass);
+
+
+--
+-- TOC entry 4837 (class 2604 OID 19546)
+-- Name: Ödemeler ÖdemeID; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Ödemeler" ALTER COLUMN "ÖdemeID" SET DEFAULT nextval('public."Ödemeler_ÖdemeID_seq"'::regclass);
+
+
+--
+-- TOC entry 5066 (class 0 OID 19503)
+-- Dependencies: 226
+-- Data for Name: Abonelik; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Abonelik" ("AbonelikID", "Adı", "Ücret", "Özellikler") FROM stdin;
+2	Premium	300	2k görüntü kalitesine kadar destek.
+1	Standart	100	1080p görüntü kalitesine kadar destek.
+\.
+
+
+--
+-- TOC entry 5064 (class 0 OID 19491)
+-- Dependencies: 224
+-- Data for Name: Bölümler; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Bölümler" ("BölümID", "DiziID", "Sezon", "Bölüm", "Yayın Tarihi", "Ad", "IMDB Puanı", "İzlenme Sayısı") FROM stdin;
+47	4	2	7	2019-08-16	Episode #2.7	8.1	1
+10	2	1	5	2020-10-23	Fork	8.2	0
+11	2	1	6	2020-10-23	Adjournment	8.4	0
+12	2	1	7	2020-10-23	End Game	9.2	0
+13	3	1	1	2019-03-08	Episode #1.1	7.7	0
+14	3	1	2	2019-03-08	Episode #1.2	7.9	0
+15	3	1	3	2019-03-08	Episode #1.3	7.9	0
+16	3	1	4	2019-03-08	Episode #1.4	8.2	0
+17	3	1	5	2019-03-08	Episode #1.5	8.5	0
+18	3	1	6	2019-03-08	Episode #1.6	8.6	0
+19	3	2	1	2020-04-24	Episode #2.1	7.8	0
+20	3	2	2	2020-04-24	Episode #2.2	7.8	0
+21	3	2	3	2020-04-24	Episode #2.3	7.9	0
+22	3	2	4	2020-04-24	Episode #2.4	8.1	0
+23	3	2	5	2020-04-24	Episode #2.5	8.3	0
+24	3	2	6	2020-04-24	Episode #2.6	8.8	0
+25	3	3	1	2022-01-14	Episode #3.1	7.3	0
+26	3	3	2	2022-01-14	Episode #3.2	7.5	0
+27	3	3	3	2022-01-14	Episode #3.3	7.8	0
+28	3	3	4	2022-01-14	Episode #3.4	7.8	0
+29	3	3	5	2022-01-14	Episode #3.5	8.0	0
+30	3	3	6	2022-01-14	Episode #3.6	9.2	0
+31	4	1	1	2017-10-13	Episode #1.1	7.8	0
+32	4	1	2	2017-10-13	Episode #1.2	8.5	0
+33	4	1	3	2017-10-13	Episode #1.3	8.2	0
+34	4	1	4	2017-10-13	Episode #1.4	8.2	0
+35	4	1	5	2017-10-13	Episode #1.5	8.6	0
+36	4	1	6	2017-10-13	Episode #1.6	7.9	0
+37	4	1	7	2017-10-13	Episode #1.7	8.2	0
+38	4	1	8	2017-10-13	Episode #1.8	8.1	0
+39	4	1	9	2017-10-13	Episode #1.9	8.5	0
+40	4	1	10	2017-10-13	Episode #1.10	9.1	0
+41	4	2	1	2019-08-16	Episode #2.1	8.1	0
+42	4	2	2	2019-08-16	Episode #2.2	8.6	0
+43	4	2	3	2019-08-16	Episode #2.3	8.2	0
+44	4	2	4	2019-08-16	Episode #2.4	8.5	0
+45	4	2	5	2019-08-16	Episode #2.5	8.9	0
+46	4	2	6	2019-08-16	Episode #2.6	8.1	0
+48	4	2	8	2019-08-16	Episode #2.8	8.5	0
+49	4	2	9	2019-08-16	Episode #2.9	8.7	0
+50	5	1	1	2019-05-31	Part One	8.9	0
+51	5	1	2	2019-05-31	Part Two	9.1	0
+52	5	1	3	2019-05-31	Part Three	8.4	0
+53	5	1	4	2019-05-31	Part Four	9.5	0
+54	6	1	1	2005-08-28	The Stolen Eagle	8.0	0
+55	6	1	2	2005-09-04	How Titus Pullo Brought Down the Republic	8.2	0
+56	6	1	3	20005-09-11	An Owl in a Thornbush	8.0	0
+57	6	1	4	2005-09-18	Stealing from Saturn	8.0	0
+58	6	1	5	2005-09-25	The Ram Has Touched the Wall	8.1	0
+59	6	1	6	2005-10-02	Egeria	8.0	0
+60	6	1	7	2005-10-09	Pharsalus	8.4	0
+61	6	1	8	2005-10-16	Caesarion	8.4	0
+62	6	1	9	2005-10-30	Utica	8.2	0
+63	6	1	10	2005-11-06	Triumph	8.3	0
+64	6	1	11	2005-11-13	The Spoils	8.9	0
+65	6	1	12	2005-05-31	Kalends of February	9.1	0
+66	6	2	1	2007-01-14	Passover	8.7	0
+67	6	2	2	2007-01-21	Son of Hades	8.4	0
+68	6	2	3	2007-01-28	These Being the Words of Marcus Tullius Cicero	8.1	0
+69	6	2	4	2007-02-04	Testudo et Lepus (The Tortoise and the Hare)	8.4	0
+70	6	2	5	2007-02-11	Heroes of the Republic	8.2	0
+71	6	2	6	2007-02-18	Philippi	8.7	0
+72	6	2	7	2007-03-04	Death Mask	8.1	0
+73	6	2	8	2007-03-11	A Necessary Fiction	8.6	0
+74	6	2	9	2007-03-18	No God Can Stop a Hungry Man	8.6	0
+75	6	2	10	2007-03-25	De Patre Vostro (About Your Father)	9.0	0
+76	7	1	1	2019-10-20	Its Summer and We are Running Out of Ice 	8.0	0
+77	7	1	2	2019-10-27	 Martial Feats of Comanche Horsemanship	7.9	0
+78	7	1	3	2019-11-03	She Was Killed by Space Junk	8.4	0
+79	7	1	4	2019-11-10	 If You Dont Like My Story, Write Your Own	8.0	0
+80	7	1	5	2019-11-17	Little Fear of Lightning	8.9	0
+81	7	1	6	2019-11-24	This Extraordinary Being	9.2	0
+82	7	1	7	2019-12-01	An Almost Religious Awe	8.8	0
+83	7	1	8	2019-12-08	A God Walks into Abar	9.4	0
+1	1	1	1	2019-05-06	Pilot	9.4	1
+2	1	1	2	2019-05-13	Please Remain Calm	9.6	2
+3	1	1	3	2019-05-20	Open Wide, O Earth	9.5	1
+4	1	1	4	2019-05-27	The Happiness of All Mankind	9.3	1
+5	1	1	5	2019-06-03	Please Remain Calm	9.8	1
+6	2	1	1	2020-10-23	Openings	8.4	1
+7	2	1	2	2020-10-23	Exchanges	8.7	1
+8	2	1	3	2020-10-23	Doubled Pawns	8.4	1
+9	2	1	4	2020-10-23	Middle Game	8.4	1
+84	7	1	9	2019-12-15	See How They Fly	8.7	0
+85	8	1	1	2001-09-09	Currahee	8.6	0
+86	8	1	2	2001-09-09	Day of Days	9.1	0
+87	8	1	3	2001-09-16	Carentan	9.0	0
+88	8	1	4	2001-09-23	Replacements	8.8	0
+89	8	1	5	2001-09-30	Crossroads	8.8	0
+90	8	1	6	2001-10-07	Bastogne	9.2	0
+91	8	1	7	2001-10-14	The Breaking Point	9.4	0
+92	8	1	8	2001-10-21	The Last Patrol	8.7	0
+93	8	1	9	2001-10-28	Why We Fight	9.5	0
+94	8	1	10	2001-11-04	Points	9.2	0
+95	9	1	1	2017-11-17	3 AM	8.5	0
+96	9	1	2	2017-11-17	Two Dead Men	8.1	0
+97	9	1	3	2017-11-17	Kandahar	8.3	0
+98	9	1	4	2017-11-17	Resupply	8.2	0
+99	9	1	5	2017-11-17	Gunner	8.6	0
+100	9	1	6	2017-11-17	The Judas Goat	8.1	0
+101	9	1	7	2017-11-17	Crosshairs	8.6	0
+102	9	1	8	2017-11-17	Cold Steel	8.7	0
+103	9	1	9	2017-11-17	Front Toward Enemy	8.9	0
+104	9	1	10	2017-11-17	Virtue of the Vicious	9.1	0
+105	9	1	11	2017-11-17	Danger Close	9.2	0
+106	9	1	12	2017-11-17	Home	9.5	0
+107	9	1	13	2017-11-17	Memento Mori	9.1	0
+108	10	1	1	2021-01-15	Filmed Before a Live Studio Audience	7.3	0
+109	10	1	2	2021-01-15	Dont Touch That Dial	7.6	0
+110	10	1	3	2021-01-22	Now in Color	8.0	0
+111	10	1	4	2021-01-29	We Interrupt This Program	8.7	0
+112	10	1	5	2021-02-06	On a Very Special Episode...	8.9	0
+113	10	1	6	2021-02-12	All-New Halloween Spooktacular!	8.7	0
+114	10	1	7	2021-02-19	Breaking the Fourth Wall	8.3	0
+115	10	1	8	2021-02-26	Previously On	8.9	0
+116	10	1	9	2021-03-05	The Series Finale	8.3	0
+\.
+
+
+--
+-- TOC entry 5084 (class 0 OID 19651)
+-- Dependencies: 244
+-- Data for Name: DiziGeçmiş; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."DiziGeçmiş" ("DiziGeçmişID", "KullanıcıID", "BölümID", "Tarih") FROM stdin;
+1	1	2	2024-12-23
+2	3	5	2024-12-23
+3	2	4	2024-12-23
+4	7	1	2024-12-23
+5	5	3	2024-12-23
+6	8	2	2024-12-23
+7	4	6	2024-12-23
+8	6	7	2024-12-23
+9	9	8	2024-12-23
+10	10	9	2024-12-23
+11	20	47	2024-12-23
+\.
+
+
+--
+-- TOC entry 5080 (class 0 OID 19614)
+-- Dependencies: 240
+-- Data for Name: DiziPuan; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."DiziPuan" ("DiziPuanID", "KullanıcıID", "BölümID", "Puan", "Tarih") FROM stdin;
+1	1	2	8	2024-12-23
+2	3	5	7	2024-12-23
+3	2	4	9	2024-12-23
+4	7	1	6	2024-12-23
+5	5	3	10	2024-12-23
+6	8	2	5	2024-12-23
+7	4	6	7	2024-12-23
+8	6	7	9	2024-12-23
+9	9	8	6	2024-12-23
+10	10	9	8	2024-12-23
+\.
+
+
+--
+-- TOC entry 5082 (class 0 OID 19633)
+-- Dependencies: 242
+-- Data for Name: DiziYorum; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."DiziYorum" ("DiziYorumID", "KullanıcıID", "BölümID", "Yorum", "Tarih") FROM stdin;
+1	1	2	Harika bir bölüm!	2024-12-23
+2	3	5	Senaryo çok etkileyiciydi.	2024-12-23
+3	2	4	Duygusal bir bölümdü.	2024-12-23
+4	7	1	Çok heyecan vericiydi.	2024-12-23
+5	5	3	Kesinlikle izlemelisiniz!	2024-12-23
+6	8	2	Biraz durağandı.	2024-12-23
+7	4	6	Görseller harikaydı.	2024-12-23
+8	6	7	Müzikler çok etkileyiciydi.	2024-12-23
+9	9	8	Oyunculuk mükemmeldi.	2024-12-23
+10	10	9	Tekrar izlemek isterim.	2024-12-23
+\.
+
+
+--
+-- TOC entry 5062 (class 0 OID 19479)
+-- Dependencies: 222
+-- Data for Name: Diziler; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Diziler" ("DiziID", "KategoriID", "Ad", "Yayın Tarihi", "IMDB Puanı", "Yönetmen", "İzlenme Sayısı") FROM stdin;
+3	3	After Life	2019-03-08	8.4	Ricky Gervais	0
+5	3	When They See Us	2019-05-31	8.9	Ava DuVernay	0
+6	11	Rome	2005-08-28	8.7	Alan Taylor	0
+7	9	Watchmen	2019-10-20	8.2	Zack Snyder	0
+8	12	Band of Brothers	2001-09-09	9.4	Phil Alden Robinson	0
+9	1	The Punisher	2017-11-17	8.4	Kevin Hooks	0
+10	9	WandaVision	2021-01-15	7.9	Matt Shakman	0
+1	3	Chernobyl	2019-04-06	9.4	Johan Renck	6
+2	3	The Queen’s Gambit	2020-10-23	8.7	Scott Frank	4
+4	10	Mindhunter	2017-10-13	8.6	David Fincher	1
+\.
+
+
+--
+-- TOC entry 5078 (class 0 OID 19597)
+-- Dependencies: 238
+-- Data for Name: FilmGeçmiş; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."FilmGeçmiş" ("FilmGeçmişID", "KullanıcıID", "FilmID", "Tarih") FROM stdin;
+1	1	2	2024-12-23
+2	3	5	2024-12-23
+3	2	4	2024-12-23
+4	7	1	2024-12-23
+5	5	3	2024-12-23
+6	8	2	2024-12-23
+7	4	6	2024-12-23
+8	6	7	2024-12-23
+9	9	8	2024-12-23
+10	10	9	2024-12-23
+16	17	10	2024-12-23
+\.
+
+
+--
+-- TOC entry 5074 (class 0 OID 19560)
+-- Dependencies: 234
+-- Data for Name: FilmPuan; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."FilmPuan" ("FilmPuanID", "KullanıcıID", "FilmID", "Puan", "Tarih") FROM stdin;
+1	1	2	8	2024-12-23
+2	3	5	7	2024-12-23
+3	2	4	9	2024-12-23
+4	7	1	6	2024-12-23
+5	5	3	10	2024-12-23
+6	8	2	5	2024-12-23
+7	4	6	7	2024-12-23
+8	6	7	9	2024-12-23
+9	9	8	6	2024-12-23
+10	10	9	8	2024-12-23
+\.
+
+
+--
+-- TOC entry 5076 (class 0 OID 19579)
+-- Dependencies: 236
+-- Data for Name: FilmYorum; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."FilmYorum" ("FilmYorumID", "KullanıcıID", "FilmID", "Yorum", "Tarih") FROM stdin;
+1	1	2	Harika bir film!	2024-12-23
+2	3	5	Senaryo etkileyiciydi.	2024-12-23
+3	2	4	Görsel efektler çok iyiydi.	2024-12-23
+4	7	1	Orta seviyede bir film.	2024-12-23
+5	5	3	Kesinlikle izlemelisiniz!	2024-12-23
+6	8	2	Biraz sıkıcıydı.	2024-12-23
+7	4	6	Müzikler çok başarılıydı.	2024-12-23
+8	6	7	Oyunculuk mükemmeldi.	2024-12-23
+9	9	8	Tekrar izlemek isterim.	2024-12-23
+10	10	9	Beklentilerimi karşıladı.	2024-12-23
+\.
+
+
+--
+-- TOC entry 5060 (class 0 OID 19467)
+-- Dependencies: 220
+-- Data for Name: Filmler; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Filmler" ("FilmID", "KategoriID", "Ad", "Yayın Tarihi", "IMDB Puanı", "Yönetmen", "İzlenme Sayısı") FROM stdin;
+11	3	Forrest Gump	1994-07-06	8.8	Robert Zemeckis	0
+12	1	The Matrix	1999-03-31	8.7	Lana Wachowski,Lilly Wachowski	0
+13	1	İyi, Kötü ve Çirkin	1966-12-23	8.8	Sergio Leone	0
+14	9	Yıldız Savaşları: İmparator	1980-05-21	8.7	Irvin Kershner	0
+16	4	Interstellar	2014-11-07	8.6	Christopher Nolan	0
+17	1	Kara Şövalye Yükseliyor	2012-07-20	8.4	Christopher Nolan	0
+18	1	Gladyatör	2000-05-05	8.5	Ridley Scott	0
+19	3	Goodfellas	1990-12-28	8.7	Martin Scorsese	0
+20	1	Prestij	2006-10-20	8.5	Christopher Nolan	0
+1	3	Esaretin Bedeli	1994-09-23	9.3	Frank Darabont	1
+2	3	Godfather	1972-03-24	9.2	Francis Ford Coppola	2
+3	3	Godfather II	1974-12-20	9.0	Francis Ford Coppola	1
+4	9	Yüzüklerin Efendisi: Kralın Dönüşü	2003-12-17	8.9	Peter Jackson	1
+5	3	Pulp Fiction	1994-10-14	8.9	Quentin Tarantino	1
+6	9	Yüzüklerin Efendisi: Yüzük Kardeşliği	2001-12-19	8.8	Peter Jackson	1
+7	9	Yüzüklerin Efendisi 2: İki Kule	2002-12-20	8.8	Peter Jackson	1
+8	3	Schindlerın Listesi	1993-12-15	9.0	Steven Spielberg	1
+9	4	Inception	2010-07-16	8.8	Christopher Nolan	1
+15	8	Aslan Kral	1994-06-15	8.5	Roger Allers, Rob Minkoff	1
+10	3	Fight Club	1999-10-15	8.8	David Fincher	1
+\.
+
+
+--
+-- TOC entry 5058 (class 0 OID 19460)
+-- Dependencies: 218
+-- Data for Name: Kategori; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Kategori" ("KategoriID", "Ad", "Açıklama") FROM stdin;
+1	Aksiyon	Hızlı tempolu, macera dolu film türü.
+2	Komedi	Gülmece ve eğlence odaklı film türü.
+3	Dram	Duygusal derinlik ve karakter odaklı film türü.
+4	Bilim Kurgu	Gelecek, teknoloji ve uzay ile ilgili film türü.
+5	Romantik	Aşk ve ilişkilerle ilgili film türü.
+6	Korku	Gerilim ve korku unsurları barındıran film türü.
+7	Animasyon	Çizgi film ve bilgisayar animasyonu tarzında film türü.
+8	Macera	Keşif ve heyecan odaklı film türü.
+9	Fantastik	Gerçek dışı dünyalar ve unsurlar içeren film türü.
+10	Gelirim	Gerilim türü izleyicilerde heyecan ve gerilim uyandıran geniş bir türdür
+11	Tarih	Geçmişte yaşanan önemli olayları seyircilere sunar
+12	Savaş	Konuları başlıca savaş olan filmlerdir
+\.
+
+
+--
+-- TOC entry 5070 (class 0 OID 19530)
+-- Dependencies: 230
+-- Data for Name: Kullanıcılar; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Kullanıcılar" ("KullanıcıID", "Adı", "Soy Adı", "E-Posta", "Şifre", "Kayıt Tarihi", "AbonelikID") FROM stdin;
+1	Ahmet	Yılmaz	ahmet.yilmaz@example.com	sifre123	2024-12-23	1
+2	Ayşe	Kaya	ayse.kaya@example.com	sifre123	2024-12-23	2
+3	Mehmet	Demir	mehmet.demir@example.com	sifre123	2024-12-23	1
+4	Fatma	Çelik	fatma.celik@example.com	sifre123	2024-12-23	2
+5	Ali	Şahin	ali.sahin@example.com	sifre123	2024-12-23	1
+6	Zeynep	Koç	zeynep.koc@example.com	sifre123	2024-12-23	2
+7	Emre	Arslan	emre.arslan@example.com	sifre123	2024-12-23	1
+8	Elif	Duman	elif.duman@example.com	sifre123	2024-12-23	2
+9	Kerem	Güneş	kerem.gunes@example.com	sifre123	2024-12-23	1
+10	Hale	Yıldız	hale.yildiz@example.com	sifre123	2024-12-23	2
+11	Eren	Çiçek	eren.cicek@example.com	sifre123	2024-12-23	1
+12	Deniz	Öztürk	deniz.ozturk@example.com	sifre123	2024-12-23	2
+13	Burak	Aydın	burak.aydin@example.com	sifre123	2024-12-23	1
+14	Nur	Korkmaz	nur.korkmaz@example.com	sifre123	2024-12-23	2
+15	Mert	Kurt	mert.kurt@example.com	sifre123	2024-12-23	1
+16	Can	Bulut	can.bulut@example.com	sifre123	2024-12-23	2
+17	Büşra	Eren	busra.eren@example.com	sifre123	2024-12-23	1
+18	Serkan	Tan	serkan.tan@example.com	sifre123	2024-12-23	2
+19	Hakan	Akın	hakan.akin@example.com	sifre123	2024-12-23	1
+20	Melike	Deniz	melike.deniz@example.com	sifre123	2024-12-23	2
+21	Seda	Göksel	seda.goksel@example.com	sifre123	2024-12-23	1
+22	Barış	İlhan	baris.ilhan@example.com	sifre123	2024-12-23	2
+24	Okan	Demirci	okan.demirci@example.com	sifre123	2024-12-23	2
+25	Selin	Bozkurt	selin.bozkurt@example.com	sifre123	2024-12-23	1
+27	Umut	Yücel	umut.yucel@example.com	sifre123	2024-12-23	1
+28	Ebru	Erdoğan	ebru.erdogan@example.com	sifre123	2024-12-23	2
+29	Yusuf	Şener	yusuf.sener@example.com	sifre123	2024-12-23	1
+31	Polat	Alemdar	polatalemdar@example.com	şifre123	2024-12-23	2
+32	Ali	Veli	aliveli@example.com	sifre123	2024-12-23	1
+33	Ali	ali	aliveli@example.com	sifre123	2024-12-23	1
+34	Ahmet	Mehmet	qweqw@example.com	şifre123	2024-12-23	2
+35	Mustafa	Kemal	abc@hotmail.com	123	2024-12-23	2
+\.
+
+
+--
+-- TOC entry 5068 (class 0 OID 19519)
+-- Dependencies: 228
+-- Data for Name: Premium; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Premium" ("AbonelikID", "Toplam Abonelik") FROM stdin;
+2	16
+\.
+
+
+--
+-- TOC entry 5067 (class 0 OID 19509)
+-- Dependencies: 227
+-- Data for Name: Standart; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Standart" ("AbonelikID", "Toplam Abonelik") FROM stdin;
+1	16
+\.
+
+
+--
+-- TOC entry 5072 (class 0 OID 19543)
+-- Dependencies: 232
+-- Data for Name: Ödemeler; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public."Ödemeler" ("ÖdemeID", "KullanıcıID", "AbonelikID", "Ödeme Tarihi", "Tutar") FROM stdin;
+1	1	1	2024-12-23	100
+2	2	2	2024-12-23	300
+3	3	1	2024-12-23	100
+4	4	2	2024-12-23	300
+5	5	1	2024-12-23	100
+6	6	2	2024-12-23	300
+7	7	1	2024-12-23	100
+8	8	2	2024-12-23	300
+9	9	1	2024-12-23	100
+10	10	2	2024-12-23	300
+11	11	1	2024-12-23	100
+12	12	2	2024-12-23	300
+13	13	1	2024-12-23	100
+14	14	2	2024-12-23	300
+15	15	1	2024-12-23	100
+16	16	2	2024-12-23	300
+17	17	1	2024-12-23	100
+18	18	2	2024-12-23	300
+19	19	1	2024-12-23	100
+20	20	2	2024-12-23	300
+21	21	1	2024-12-23	100
+22	22	2	2024-12-23	300
+24	24	2	2024-12-23	300
+25	25	1	2024-12-23	100
+27	27	1	2024-12-23	100
+28	28	2	2024-12-23	300
+29	29	1	2024-12-23	100
+31	31	2	2024-12-23	300
+32	32	1	2024-12-23	100
+33	33	1	2024-12-23	100
+34	34	2	2024-12-23	300
+35	35	2	2024-12-23	300
+\.
+
+
+--
+-- TOC entry 5103 (class 0 OID 0)
+-- Dependencies: 225
+-- Name: Abonelik_AbonelikID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Abonelik_AbonelikID_seq"', 2, true);
+
+
+--
+-- TOC entry 5104 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: Bölümler_BölümID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Bölümler_BölümID_seq"', 116, true);
+
+
+--
+-- TOC entry 5105 (class 0 OID 0)
+-- Dependencies: 243
+-- Name: DiziGeçmiş_DiziGeçmişID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."DiziGeçmiş_DiziGeçmişID_seq"', 11, true);
+
+
+--
+-- TOC entry 5106 (class 0 OID 0)
+-- Dependencies: 239
+-- Name: DiziPuan_DiziPuanID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."DiziPuan_DiziPuanID_seq"', 10, true);
+
+
+--
+-- TOC entry 5107 (class 0 OID 0)
+-- Dependencies: 241
+-- Name: DiziYorum_DiziYorumID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."DiziYorum_DiziYorumID_seq"', 10, true);
+
+
+--
+-- TOC entry 5108 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: Diziler_DiziID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Diziler_DiziID_seq"', 10, true);
+
+
+--
+-- TOC entry 5109 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: FilmGeçmiş_FilmGeçmişID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."FilmGeçmiş_FilmGeçmişID_seq"', 16, true);
+
+
+--
+-- TOC entry 5110 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: FilmPuan_FilmPuanID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."FilmPuan_FilmPuanID_seq"', 10, true);
+
+
+--
+-- TOC entry 5111 (class 0 OID 0)
+-- Dependencies: 235
+-- Name: FilmYorum_FilmYorumID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."FilmYorum_FilmYorumID_seq"', 10, true);
+
+
+--
+-- TOC entry 5112 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: Filmler_FilmID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Filmler_FilmID_seq"', 20, true);
+
+
+--
+-- TOC entry 5113 (class 0 OID 0)
+-- Dependencies: 217
+-- Name: Kategori_KategoriID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Kategori_KategoriID_seq"', 12, true);
+
+
+--
+-- TOC entry 5114 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: Kullanıcılar_KullanıcıID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Kullanıcılar_KullanıcıID_seq"', 35, true);
+
+
+--
+-- TOC entry 5115 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: Ödemeler_ÖdemeID_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public."Ödemeler_ÖdemeID_seq"', 35, true);
+
+
+--
+-- TOC entry 4862 (class 2606 OID 19508)
+-- Name: Abonelik AbonelikPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Abonelik"
+    ADD CONSTRAINT "AbonelikPK" PRIMARY KEY ("AbonelikID");
+
+
+--
+-- TOC entry 4860 (class 2606 OID 19496)
+-- Name: Bölümler BölümPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Bölümler"
+    ADD CONSTRAINT "BölümPK" PRIMARY KEY ("BölümID");
+
+
+--
+-- TOC entry 4882 (class 2606 OID 19656)
+-- Name: DiziGeçmiş DiziGeçmişPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziGeçmiş"
+    ADD CONSTRAINT "DiziGeçmişPK" PRIMARY KEY ("DiziGeçmişID");
+
+
+--
+-- TOC entry 4858 (class 2606 OID 19484)
+-- Name: Diziler DiziPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Diziler"
+    ADD CONSTRAINT "DiziPK" PRIMARY KEY ("DiziID");
+
+
+--
+-- TOC entry 4878 (class 2606 OID 19621)
+-- Name: DiziPuan DiziPuanPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziPuan"
+    ADD CONSTRAINT "DiziPuanPK" PRIMARY KEY ("DiziPuanID");
+
+
+--
+-- TOC entry 4880 (class 2606 OID 19639)
+-- Name: DiziYorum DiziYorumPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziYorum"
+    ADD CONSTRAINT "DiziYorumPK" PRIMARY KEY ("DiziYorumID");
+
+
+--
+-- TOC entry 4876 (class 2606 OID 19602)
+-- Name: FilmGeçmiş FilmGeçmişPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmGeçmiş"
+    ADD CONSTRAINT "FilmGeçmişPK" PRIMARY KEY ("FilmGeçmişID");
+
+
+--
+-- TOC entry 4856 (class 2606 OID 19472)
+-- Name: Filmler FilmPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Filmler"
+    ADD CONSTRAINT "FilmPK" PRIMARY KEY ("FilmID");
+
+
+--
+-- TOC entry 4872 (class 2606 OID 19567)
+-- Name: FilmPuan FilmPuanPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmPuan"
+    ADD CONSTRAINT "FilmPuanPK" PRIMARY KEY ("FilmPuanID");
+
+
+--
+-- TOC entry 4874 (class 2606 OID 19585)
+-- Name: FilmYorum FilmYorumPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmYorum"
+    ADD CONSTRAINT "FilmYorumPK" PRIMARY KEY ("FilmYorumID");
+
+
+--
+-- TOC entry 4854 (class 2606 OID 19465)
+-- Name: Kategori KategoriPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Kategori"
+    ADD CONSTRAINT "KategoriPK" PRIMARY KEY ("KategoriID");
+
+
+--
+-- TOC entry 4868 (class 2606 OID 19536)
+-- Name: Kullanıcılar KullanıcıPK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Kullanıcılar"
+    ADD CONSTRAINT "KullanıcıPK" PRIMARY KEY ("KullanıcıID");
+
+
+--
+-- TOC entry 4866 (class 2606 OID 19523)
+-- Name: Premium Premium_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Premium"
+    ADD CONSTRAINT "Premium_pkey" PRIMARY KEY ("AbonelikID");
+
+
+--
+-- TOC entry 4864 (class 2606 OID 19513)
+-- Name: Standart Standart_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Standart"
+    ADD CONSTRAINT "Standart_pkey" PRIMARY KEY ("AbonelikID");
+
+
+--
+-- TOC entry 4870 (class 2606 OID 19548)
+-- Name: Ödemeler ÖdemePK; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Ödemeler"
+    ADD CONSTRAINT "ÖdemePK" PRIMARY KEY ("ÖdemeID");
+
+
+--
+-- TOC entry 4903 (class 2620 OID 19711)
+-- Name: Kullanıcılar abonelik_sayisi_azalt_trigger; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER abonelik_sayisi_azalt_trigger AFTER DELETE ON public."Kullanıcılar" FOR EACH ROW EXECUTE FUNCTION public.abonelik_sayisi_azalt();
+
+
+--
+-- TOC entry 4904 (class 2620 OID 19709)
+-- Name: Kullanıcılar abonelik_sayisi_trigger; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER abonelik_sayisi_trigger AFTER INSERT OR UPDATE ON public."Kullanıcılar" FOR EACH ROW EXECUTE FUNCTION public.abonelik_sayisi_guncelle();
+
+
+--
+-- TOC entry 4905 (class 2620 OID 19697)
+-- Name: Kullanıcılar after_delete_kullanici; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER after_delete_kullanici AFTER DELETE ON public."Kullanıcılar" FOR EACH ROW EXECUTE FUNCTION public.update_abone_sayisi_sil();
+
+
+--
+-- TOC entry 4911 (class 2620 OID 19768)
+-- Name: DiziGeçmiş bolum_ve_dizi_izlenme_sayisi_guncelle; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER bolum_ve_dizi_izlenme_sayisi_guncelle AFTER INSERT ON public."DiziGeçmiş" FOR EACH ROW EXECUTE FUNCTION public.bolum_ve_dizi_izlenme_sayisi_artir();
+
+
+--
+-- TOC entry 4910 (class 2620 OID 19756)
+-- Name: DiziPuan dizi_tekrar_puan_engelle; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER dizi_tekrar_puan_engelle BEFORE INSERT ON public."DiziPuan" FOR EACH ROW EXECUTE FUNCTION public.tekrar_puan_engelle();
+
+
+--
+-- TOC entry 4909 (class 2620 OID 19759)
+-- Name: FilmGeçmiş film_izlenme_sayisi_guncelle; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER film_izlenme_sayisi_guncelle AFTER INSERT ON public."FilmGeçmiş" FOR EACH ROW EXECUTE FUNCTION public.film_izlenme_sayisi_artir();
+
+
+--
+-- TOC entry 4908 (class 2620 OID 19755)
+-- Name: FilmPuan film_tekrar_puan_engelle; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER film_tekrar_puan_engelle BEFORE INSERT ON public."FilmPuan" FOR EACH ROW EXECUTE FUNCTION public.tekrar_puan_engelle();
+
+
+--
+-- TOC entry 4906 (class 2620 OID 19695)
+-- Name: Kullanıcılar kullanici_ekleme_abonesayisi; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER kullanici_ekleme_abonesayisi AFTER INSERT ON public."Kullanıcılar" FOR EACH ROW EXECUTE FUNCTION public.update_abone_sayisi();
+
+
+--
+-- TOC entry 4907 (class 2620 OID 19706)
+-- Name: Kullanıcılar odeme_listesine_ekle_trigger; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER odeme_listesine_ekle_trigger AFTER INSERT ON public."Kullanıcılar" FOR EACH ROW EXECUTE FUNCTION public.odeme_listesine_ekle();
+
+
+--
+-- TOC entry 4885 (class 2606 OID 19497)
+-- Name: Bölümler BölümFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Bölümler"
+    ADD CONSTRAINT "BölümFK" FOREIGN KEY ("DiziID") REFERENCES public."Diziler"("DiziID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4884 (class 2606 OID 19485)
+-- Name: Diziler DiziFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Diziler"
+    ADD CONSTRAINT "DiziFK" FOREIGN KEY ("KategoriID") REFERENCES public."Kategori"("KategoriID");
+
+
+--
+-- TOC entry 4901 (class 2606 OID 19657)
+-- Name: DiziGeçmiş DiziGeçmişFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziGeçmiş"
+    ADD CONSTRAINT "DiziGeçmişFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4902 (class 2606 OID 19662)
+-- Name: DiziGeçmiş DiziGeçmişFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziGeçmiş"
+    ADD CONSTRAINT "DiziGeçmişFK2" FOREIGN KEY ("BölümID") REFERENCES public."Bölümler"("BölümID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4897 (class 2606 OID 19622)
+-- Name: DiziPuan DiziPuanFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziPuan"
+    ADD CONSTRAINT "DiziPuanFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4898 (class 2606 OID 19627)
+-- Name: DiziPuan DiziPuanFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziPuan"
+    ADD CONSTRAINT "DiziPuanFK2" FOREIGN KEY ("BölümID") REFERENCES public."Bölümler"("BölümID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4899 (class 2606 OID 19640)
+-- Name: DiziYorum DiziYorumFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziYorum"
+    ADD CONSTRAINT "DiziYorumFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4900 (class 2606 OID 19645)
+-- Name: DiziYorum DiziYorumFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."DiziYorum"
+    ADD CONSTRAINT "DiziYorumFK2" FOREIGN KEY ("BölümID") REFERENCES public."Bölümler"("BölümID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4883 (class 2606 OID 19473)
+-- Name: Filmler FilmFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Filmler"
+    ADD CONSTRAINT "FilmFK" FOREIGN KEY ("KategoriID") REFERENCES public."Kategori"("KategoriID");
+
+
+--
+-- TOC entry 4895 (class 2606 OID 19603)
+-- Name: FilmGeçmiş FilmGeçmişFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmGeçmiş"
+    ADD CONSTRAINT "FilmGeçmişFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4896 (class 2606 OID 19608)
+-- Name: FilmGeçmiş FilmGeçmişFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmGeçmiş"
+    ADD CONSTRAINT "FilmGeçmişFK2" FOREIGN KEY ("FilmID") REFERENCES public."Filmler"("FilmID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4891 (class 2606 OID 19568)
+-- Name: FilmPuan FilmPuanFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmPuan"
+    ADD CONSTRAINT "FilmPuanFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4892 (class 2606 OID 19573)
+-- Name: FilmPuan FilmPuanFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmPuan"
+    ADD CONSTRAINT "FilmPuanFK2" FOREIGN KEY ("FilmID") REFERENCES public."Filmler"("FilmID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4893 (class 2606 OID 19586)
+-- Name: FilmYorum FilmYorumFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmYorum"
+    ADD CONSTRAINT "FilmYorumFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4894 (class 2606 OID 19591)
+-- Name: FilmYorum FilmYorumFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."FilmYorum"
+    ADD CONSTRAINT "FilmYorumFK2" FOREIGN KEY ("FilmID") REFERENCES public."Filmler"("FilmID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4888 (class 2606 OID 19537)
+-- Name: Kullanıcılar KullanıcıFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Kullanıcılar"
+    ADD CONSTRAINT "KullanıcıFK" FOREIGN KEY ("AbonelikID") REFERENCES public."Abonelik"("AbonelikID") ON UPDATE CASCADE;
+
+
+--
+-- TOC entry 4887 (class 2606 OID 19524)
+-- Name: Premium PremiumFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Premium"
+    ADD CONSTRAINT "PremiumFK" FOREIGN KEY ("AbonelikID") REFERENCES public."Abonelik"("AbonelikID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4886 (class 2606 OID 19514)
+-- Name: Standart StandartFK; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Standart"
+    ADD CONSTRAINT "StandartFK" FOREIGN KEY ("AbonelikID") REFERENCES public."Abonelik"("AbonelikID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4889 (class 2606 OID 19549)
+-- Name: Ödemeler ÖdemeFK1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Ödemeler"
+    ADD CONSTRAINT "ÖdemeFK1" FOREIGN KEY ("KullanıcıID") REFERENCES public."Kullanıcılar"("KullanıcıID") ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4890 (class 2606 OID 19554)
+-- Name: Ödemeler ÖdemeFK2; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public."Ödemeler"
+    ADD CONSTRAINT "ÖdemeFK2" FOREIGN KEY ("AbonelikID") REFERENCES public."Abonelik"("AbonelikID") ON UPDATE CASCADE;
+
+
+-- Completed on 2024-12-23 23:36:25
+
+--
+-- PostgreSQL database dump complete
+--
+
